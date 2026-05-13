@@ -1,0 +1,52 @@
+{
+  "name": "devpanel-api",
+  "version": "0.1.0",
+  "description": "DevPanel backend - Express + TypeScript + MongoDB Atlas",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only --exit-child src/server.ts",
+    "build": "tsc -p .",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "seed": "ts-node --transpile-only src/scripts/seed.ts",
+    "db:seed": "ts-node --transpile-only src/scripts/seed.ts",
+    "db:seed:users": "ts-node --transpile-only src/scripts/seed-users.ts",
+    "db:reset": "ts-node --transpile-only src/scripts/reset-db.ts"
+  },
+  "keywords": [
+    "devpanel",
+    "saas",
+    "express",
+    "typescript",
+    "mongodb"
+  ],
+  "author": "DevPanel Team",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.6.2",
+    "morgan": "^1.10.1",
+    "multer": "^2.1.1",
+    "octokit": "^5.0.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^25.6.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^6.0.3"
+  }
+}
