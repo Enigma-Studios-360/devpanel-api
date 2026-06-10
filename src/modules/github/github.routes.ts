@@ -1,19 +1,18 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middlewares/auth.middleware';
-import { ok } from '../../shared/types/api-response';
+import { githubOauthController } from './github-oauth.controller';
 
 const router = Router();
-router.use(requireAuth);
 
-// TODO(phase-6):
-// POST /api/projects/:projectId/github/link
-// GET  /api/projects/:projectId/github/commits
-// GET  /api/projects/:projectId/github/issues
-// GET  /api/projects/:projectId/github/branches
-// POST /api/projects/:projectId/github/issues
-
-router.get('/_placeholder', (_req, res) => {
-  res.json(ok({ module: 'github', status: 'scaffold' }));
-});
+// Per-user GitHub OAuth ("Connect GitHub"). The project-scoped GitHub
+// endpoints (commits/branches/issues/...) live under /api/projects/:id/github.
+//
+// NOTE: the callback is hit by GitHub's browser redirect with NO auth header,
+// so requireAuth is applied per-route (not globally) — identity for the
+// callback travels in the signed `state`.
+router.get('/oauth/start', requireAuth, githubOauthController.start);
+router.get('/oauth/callback', githubOauthController.callback);
+router.get('/oauth/status', requireAuth, githubOauthController.status);
+router.post('/oauth/disconnect', requireAuth, githubOauthController.disconnect);
 
 export const githubRouter = router;

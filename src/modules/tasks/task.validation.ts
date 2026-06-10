@@ -16,7 +16,7 @@ export const createTaskSchema = z.object({
   priority: taskPriorityEnum.optional(),
   assignees: z.array(z.string()).optional(),
   dueDate: flexibleDate,
-});
+}).strict();
 
 export const updateTaskSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -24,12 +24,12 @@ export const updateTaskSchema = z.object({
   priority: taskPriorityEnum.optional(),
   assignees: z.array(z.string()).optional(),
   dueDate: flexibleDate,
-});
+}).strict();
 
 export const updateTaskStatusSchema = z.object({
   status: taskStatusEnum,
-});
+}).strict();
 
 export const createTaskCommentSchema = z.object({
   message: z.string().min(1).max(5000),
-});
+}).strict();

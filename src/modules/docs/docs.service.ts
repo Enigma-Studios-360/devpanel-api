@@ -9,7 +9,11 @@ import { ProjectModel } from '../projects/project.model';
 import { SubscriptionModel } from '../subscriptions/subscription.model';
 import { TeamMemberModel } from '../teams/team-member.model';
 import { activityService } from '../activity/activity.service';
+import { githubService } from '../github/github.service';
+import { deepseekChat } from '../../shared/utils/deepseek';
+import { AppError } from '../../shared/errors/AppError';
 import {
+  BadRequestError,
   ForbiddenError,
   NotFoundError,
   PlanLimitError,
@@ -177,6 +181,81 @@ export const docsService = {
     const project = await ProjectModel.findById(projectId).select('name').lean();
     const projectName = project?.name ?? 'Project';
     return { markdown: buildReadme(doc, projectName), doc, projectName };
+  },
+
+  /**
+   * Generate content for all 9 doc sections from the linked GitHub repo using
+   * DeepSeek, then persist it through the normal `update` path (which logs
+   * activity + recomputes completion). Requires a linked repository.
+   */
+  async generateWithAi(
+    projectId: string,
+    userId: string,
+  ): Promise<ProjectDocDocument> {
+    await assertProjectAccess(projectId, userId);
+    const project = await ProjectModel.findById(projectId)
+      .select('githubOwner githubRepo')
+      .lean();
+    if (!project?.githubOwner || !project?.githubRepo) {
+      throw new BadRequestError(
+        'Primero vincula un repositorio de GitHub (pestaña GitHub) para generar la documentación con IA.',
+      );
+    }
+
+    const context = await githubService.getAiRepoContext(projectId, userId);
+
+    const sectionList = DOC_SECTION_KEYS.map(
+      (k) => `"${k}" (${DEFAULT_TITLES[k]})`,
+    ).join(', ');
+
+    const system =
+      'Eres un escritor técnico. A partir del contexto de un repositorio, ' +
+      'redactas documentación clara, concreta y en español, en formato Markdown, ' +
+      'para cada sección de un README. No inventes datos que el contexto no ' +
+      'respalde; si falta información, escribe una guía genérica razonable acorde ' +
+      'al stack detectado. Devuelves EXCLUSIVAMENTE un objeto JSON válido.';
+
+    const userPrompt =
+      `Contexto del repositorio:\n\n${context}\n\n` +
+      `Devuelve un objeto JSON con EXACTAMENTE estas claves: ${sectionList}. ` +
+      'El valor de cada clave es el contenido en Markdown de esa sección ' +
+      '(NO incluyas el encabezado del título, solo el cuerpo). Sé conciso pero útil.';
+
+    const raw = await deepseekChat(
+      [
+        { role: 'system', content: system },
+        { role: 'user', content: userPrompt },
+      ],
+      { jsonMode: true, maxTokens: 2200, temperature: 0.4 },
+    );
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      throw new AppError(
+        'La IA devolvió un formato inesperado. Intenta de nuevo.',
+        502,
+        'DOCS_AI_BAD_FORMAT',
+      );
+    }
+
+    const sections: Partial<Record<DocSectionKey, SectionPatch>> = {};
+    for (const key of DOC_SECTION_KEYS) {
+      const value = parsed[key];
+      if (typeof value === 'string' && value.trim()) {
+        sections[key] = { content: value.trim() };
+      }
+    }
+    if (Object.keys(sections).length === 0) {
+      throw new AppError(
+        'La IA no generó contenido utilizable. Intenta de nuevo.',
+        502,
+        'DOCS_AI_EMPTY',
+      );
+    }
+
+    return this.update(projectId, userId, { sections });
   },
 
   /**

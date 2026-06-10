@@ -89,4 +89,16 @@ export const githubController = {
       next(error);
     }
   }) as RequestHandler,
+
+  detectStack: (async (req, res, next) => {
+    try {
+      const result = await githubService.detectStack(
+        getParam(req, 'projectId'),
+        req.user!.id,
+      );
+      res.json(ok(result));
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler,
 };

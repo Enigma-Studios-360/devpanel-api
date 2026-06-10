@@ -1,11 +1,12 @@
 /* eslint-disable no-console */
 /**
- * Seed script — creates test users with every role plus a demo team
- * (STARTER plan with 3 projects) and a Free-tier solo team for the
- * owner. Idempotent: re-running it never duplicates data and never
- * overwrites existing passwords.
+ * Seed script — creates demo users with every role, a realistic STARTER
+ * team ("DevHub Demo") with three projects connected to real public GitHub
+ * repos and a Kanban full of tasks, plus a FREE solo team to demo the plan
+ * limit. Idempotent: re-running never duplicates data nor overwrites
+ * existing passwords.
  *
- * Run with:  npm run seed
+ * Run with:  npm run db:seed   (or, for a clean wipe first: npm run db:reset -- --yes)
  */
 
 import bcrypt from 'bcrypt';
@@ -16,11 +17,13 @@ import { UserModel, type UserDocument } from '../modules/users/user.model';
 import { TeamModel, type TeamDocument } from '../modules/teams/team.model';
 import { TeamMemberModel } from '../modules/teams/team-member.model';
 import { SubscriptionModel } from '../modules/subscriptions/subscription.model';
-import { ProjectModel } from '../modules/projects/project.model';
+import { ProjectModel, type ProjectDocument } from '../modules/projects/project.model';
+import { TaskModel } from '../modules/tasks/task.model';
 import { ActivityLogModel } from '../modules/activity/activity.model';
 import { PLAN_LIMITS, type PlanCode } from '../shared/constants/plans';
 import type { TeamRole } from '../shared/constants/roles';
 import type { ProjectStatus } from '../shared/constants/project-status';
+import type { TaskStatus, TaskPriority } from '../shared/constants/task-status';
 
 const SHARED_PASSWORD = 'password123';
 const SALT_ROUNDS = 10;
@@ -35,12 +38,26 @@ interface SeedMembership {
   role: TeamRole;
 }
 
+interface SeedTask {
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  /** Email of the user to assign (optional). */
+  assignee?: string;
+  /** Days from now for the due date (optional). */
+  dueInDays?: number;
+}
+
 interface SeedProject {
   name: string;
   slug: string;
   description: string;
   status: ProjectStatus;
   stack: string[];
+  /** Real public GitHub repo to "connect" so the GitHub tab shows live data. */
+  github?: { owner: string; repo: string; defaultBranch?: string };
+  tasks?: SeedTask[];
 }
 
 const USERS: SeedUser[] = [
@@ -53,8 +70,8 @@ const USERS: SeedUser[] = [
 ];
 
 const DEMO_TEAM = {
-  name: 'DevPanel Demo',
-  slug: 'devpanel-demo',
+  name: 'DevHub Demo',
+  slug: 'devhub-demo',
   plan: 'STARTER' as PlanCode,
 };
 
@@ -67,25 +84,49 @@ const DEMO_MEMBERSHIPS: SeedMembership[] = [
 
 const DEMO_PROJECTS: SeedProject[] = [
   {
-    name: 'Landing Page',
-    slug: 'landing-page',
-    description: 'Sitio público de marketing para DevPanel.',
+    name: 'DevHub Web',
+    slug: 'devhub-web',
+    description: 'Frontend Angular 21 + PrimeNG: dashboard, Kanban, docs, GitHub y deploy.',
     status: 'DEVELOPMENT',
-    stack: ['Angular', 'SCSS', 'PrimeNG'],
+    stack: ['Angular', 'TypeScript', 'PrimeNG', 'SCSS'],
+    github: { owner: 'angular', repo: 'components', defaultBranch: 'main' },
+    tasks: [
+      { title: 'Arreglar z-index del tutorial sobre los modales', description: 'El overlay tapaba el modal de crear equipo.', status: 'DONE', priority: 'HIGH', assignee: 'dev@devpanel.dev' },
+      { title: 'Sidebar contextual por proyecto', description: 'Mostrar Tareas/Docs/GitHub/Deploy del proyecto activo.', status: 'DONE', priority: 'MEDIUM', assignee: 'admin@devpanel.dev' },
+      { title: 'Montar Clippy a nivel raíz', description: 'Que el asistente se vea en landing y auth, no solo en /app.', status: 'IN_PROGRESS', priority: 'MEDIUM', assignee: 'dev@devpanel.dev' },
+      { title: 'Breadcrumbs en vistas de proyecto', status: 'TODO', priority: 'LOW' },
+      { title: 'Buscador global con ⌘K', description: 'Hoy el input del topbar es decorativo.', status: 'TODO', priority: 'MEDIUM' },
+      { title: 'Revisar contraste del tema claro', status: 'REVIEW', priority: 'LOW', assignee: 'viewer@devpanel.dev' },
+    ],
   },
   {
-    name: 'Backend API',
-    slug: 'backend-api',
-    description: 'API REST para autenticación, equipos y proyectos.',
+    name: 'DevHub API',
+    slug: 'devhub-api',
+    description: 'Backend Express 5 + MongoDB: auth con roles, proyectos, tareas, GitHub y Vercel.',
     status: 'TESTING',
-    stack: ['Express', 'TypeScript', 'MongoDB'],
+    stack: ['Express', 'TypeScript', 'MongoDB', 'Zod'],
+    github: { owner: 'expressjs', repo: 'express', defaultBranch: 'master' },
+    tasks: [
+      { title: 'Validar variables de entorno con Zod al arrancar', description: 'Evitar arrancar con JWT_SECRET débil.', status: 'TODO', priority: 'HIGH', assignee: 'admin@devpanel.dev' },
+      { title: 'Implementar módulo de archivos (uploads)', description: 'Multer ya está configurado; falta cablear las rutas.', status: 'TODO', priority: 'MEDIUM' },
+      { title: 'Endpoint de reorden de tareas (campo order)', description: 'Persistir el orden intra-columna del Kanban.', status: 'BLOCKED', priority: 'MEDIUM', assignee: 'dev@devpanel.dev' },
+      { title: 'Hooks de notificación en deploy', status: 'DONE', priority: 'MEDIUM' },
+      { title: 'Rate limit del asistente por usuario', status: 'DONE', priority: 'LOW' },
+      { title: 'Paginación en commits/branches de GitHub', status: 'IN_PROGRESS', priority: 'LOW', assignee: 'dev@devpanel.dev' },
+    ],
   },
   {
-    name: 'Mobile App',
-    slug: 'mobile-app',
-    description: 'App móvil de solo consulta (Fase 5).',
+    name: 'Deploy Bot',
+    slug: 'deploy-bot',
+    description: 'Integración con la API de Vercel para el Deploy Wizard de 4 pasos.',
     status: 'PLANNING',
-    stack: ['Kotlin'],
+    stack: ['Node.js', 'Vercel API'],
+    github: { owner: 'vercel', repo: 'vercel', defaultBranch: 'main' },
+    tasks: [
+      { title: 'Botón "Reintentar deploy"', description: 'Hoy hay que lanzar uno nuevo desde cero.', status: 'TODO', priority: 'MEDIUM' },
+      { title: 'Pausar polling con Page Visibility API', status: 'TODO', priority: 'LOW' },
+      { title: 'Mostrar logs del build en la app', status: 'TODO', priority: 'LOW' },
+    ],
   },
 ];
 
@@ -96,11 +137,16 @@ const FREE_TEAM = {
 };
 
 const FREE_PROJECT: SeedProject = {
-  name: 'Mi proyecto personal',
-  slug: 'mi-proyecto-personal',
-  description: 'Proyecto solo en plan FREE — sirve para demostrar el límite.',
+  name: 'Portfolio personal',
+  slug: 'portfolio-personal',
+  description: 'Proyecto en plan FREE — sirve para demostrar el límite de 1 proyecto activo.',
   status: 'PLANNING',
-  stack: ['Astro'],
+  stack: ['Astro', 'Tailwind'],
+  github: { owner: 'withastro', repo: 'astro', defaultBranch: 'main' },
+  tasks: [
+    { title: 'Diseñar la home', status: 'TODO', priority: 'MEDIUM' },
+    { title: 'Conectar formulario de contacto', status: 'TODO', priority: 'LOW' },
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -116,9 +162,6 @@ const isValidHash = (value: unknown): value is string =>
 const upsertUser = async (seed: SeedUser): Promise<UpsertResult> => {
   const existing = await UserModel.findOne({ email: seed.email });
   if (existing) {
-    // Repair-on-detect: if a previous version of the seed (or a manual
-    // insert) created the user without a valid passwordHash, regenerate it
-    // with the demo password. We never overwrite a real, valid hash.
     if (!isValidHash(existing.passwordHash)) {
       existing.passwordHash = await bcrypt.hash(SHARED_PASSWORD, SALT_ROUNDS);
       if (!existing.status) existing.status = 'ACTIVE';
@@ -208,10 +251,10 @@ const upsertProject = async (
   teamId: Types.ObjectId,
   ownerId: Types.ObjectId,
   seed: SeedProject,
-): Promise<void> => {
+): Promise<ProjectDocument> => {
   const existing = await ProjectModel.findOne({ team: teamId, slug: seed.slug });
-  if (existing) return;
-  await ProjectModel.create({
+  if (existing) return existing;
+  return ProjectModel.create({
     team: teamId,
     name: seed.name,
     slug: seed.slug,
@@ -221,7 +264,42 @@ const upsertProject = async (
     members: [ownerId],
     createdBy: ownerId,
     color: '#3B82F6',
+    repositoryUrl: seed.github
+      ? `https://github.com/${seed.github.owner}/${seed.github.repo}`
+      : undefined,
+    githubOwner: seed.github?.owner,
+    githubRepo: seed.github?.repo,
+    defaultBranch: seed.github?.defaultBranch ?? 'main',
   });
+};
+
+/** Seed tasks for a project — idempotent (skips if the project already has any). */
+const seedTasks = async (
+  project: ProjectDocument,
+  tasks: SeedTask[] | undefined,
+  createdBy: Types.ObjectId,
+  usersByEmail: Map<string, UserDocument>,
+): Promise<number> => {
+  if (!tasks || tasks.length === 0) return 0;
+  const existing = await TaskModel.countDocuments({ project: project._id });
+  if (existing > 0) return 0;
+  const docs = tasks.map((t) => ({
+    project: project._id,
+    title: t.title,
+    description: t.description,
+    status: t.status,
+    priority: t.priority,
+    createdBy,
+    assignees: t.assignee && usersByEmail.get(t.assignee)
+      ? [usersByEmail.get(t.assignee)!._id]
+      : [],
+    dueDate:
+      t.dueInDays !== undefined
+        ? new Date(Date.now() + t.dueInDays * 86_400_000)
+        : undefined,
+  }));
+  await TaskModel.insertMany(docs);
+  return docs.length;
 };
 
 // ---------------------------------------------------------------------------
@@ -235,11 +313,11 @@ const printSummary = (): void => {
   const sep = (): void => console.log('├' + '─'.repeat(W - 2) + '┤');
 
   console.log('\n┌' + '─'.repeat(W - 2) + '┐');
-  line('  DevPanel — usuarios de prueba creados');
+  line('  DevHub — datos de prueba creados');
   sep();
   line(`  Password compartido para todos:  ${SHARED_PASSWORD}`);
   sep();
-  line('  Email                          Nombre              Rol en DevPanel Demo');
+  line('  Email                          Nombre              Rol en DevHub Demo');
   line('  ─────────────────────────────  ──────────────────  ────────────────────');
   line('  owner@devpanel.dev             Olivia Owner        OWNER');
   line('  admin@devpanel.dev             Adam Admin          ADMIN');
@@ -248,11 +326,11 @@ const printSummary = (): void => {
   line('  outsider@devpanel.dev          Erika External      (no es miembro)');
   sep();
   line('  Equipos creados:');
-  line(`    · "${DEMO_TEAM.name}" (${DEMO_TEAM.plan}) — 3 proyectos, 4 miembros`);
+  line(`    · "${DEMO_TEAM.name}" (${DEMO_TEAM.plan}) — 3 proyectos con repos + tareas`);
   line(`    · "${FREE_TEAM.name}" (${FREE_TEAM.plan}) — 1 proyecto, solo Olivia`);
   sep();
-  line('  Tip: inicia sesión como Vera para probar restricciones de VIEWER');
-  line('       (no podrá hacer simulate-upgrade) y como Olivia para verlo todo.');
+  line('  Repos conectados (públicos): angular/components, expressjs/express,');
+  line('  vercel/vercel, withastro/astro. La pestaña GitHub muestra datos reales.');
   console.log('└' + '─'.repeat(W - 2) + '┘\n');
 };
 
@@ -264,12 +342,10 @@ const main = async (): Promise<void> => {
 
   console.log('[seed] Sembrando usuarios…');
   const users = new Map<string, UserDocument>();
-  let createdUsers = 0;
   let repairedUsers = 0;
   for (const u of USERS) {
     const result = await upsertUser(u);
     users.set(u.email, result.doc);
-    if (result.state === 'created') createdUsers += 1;
     if (result.state === 'repaired-hash') repairedUsers += 1;
     const tag =
       result.state === 'created'
@@ -295,30 +371,39 @@ const main = async (): Promise<void> => {
   }
   console.log(`  → team _id=${demoTeam._id}`);
 
-  console.log('\n[seed] Proyectos del equipo demo…');
+  console.log('\n[seed] Proyectos del equipo demo (+ repos + tareas)…');
+  let totalTasks = 0;
   for (const p of DEMO_PROJECTS) {
-    await upsertProject(demoTeam._id, olivia._id, p);
-    console.log(`  ✓ ${p.name} [${p.status}]`);
+    const project = await upsertProject(demoTeam._id, olivia._id, p);
+    const made = await seedTasks(project, p.tasks, olivia._id, users);
+    totalTasks += made;
+    const repo = p.github ? `  [${p.github.owner}/${p.github.repo}]` : '';
+    console.log(`  ✓ ${p.name} [${p.status}]${repo}  (+${made} tareas)`);
   }
 
   console.log(`\n[seed] Equipo "${FREE_TEAM.name}" (${FREE_TEAM.plan}) — solo Olivia…`);
   const freeTeam = await upsertTeam(FREE_TEAM, olivia._id);
   await upsertSubscription(freeTeam._id, FREE_TEAM.plan);
   await upsertMembership(freeTeam._id, olivia._id, 'OWNER');
-  await upsertProject(freeTeam._id, olivia._id, FREE_PROJECT);
+  const freeProject = await upsertProject(freeTeam._id, olivia._id, FREE_PROJECT);
+  totalTasks += await seedTasks(freeProject, FREE_PROJECT.tasks, olivia._id, users);
   console.log(`  → team _id=${freeTeam._id}`);
 
-  // Summary counts so the user knows what's in DB
-  const [userCount, teamCount, memberCount, projectCount, activityCount] = await Promise.all([
-    UserModel.countDocuments(),
-    TeamModel.countDocuments(),
-    TeamMemberModel.countDocuments(),
-    ProjectModel.countDocuments(),
-    ActivityLogModel.countDocuments(),
-  ]);
+  const [userCount, teamCount, memberCount, projectCount, taskCount, activityCount] =
+    await Promise.all([
+      UserModel.countDocuments(),
+      TeamModel.countDocuments(),
+      TeamMemberModel.countDocuments(),
+      ProjectModel.countDocuments(),
+      TaskModel.countDocuments(),
+      ActivityLogModel.countDocuments(),
+    ]);
 
   console.log('\n[seed] Estado total de la BD:');
-  console.log(`  users=${userCount}  teams=${teamCount}  memberships=${memberCount}  projects=${projectCount}  activity=${activityCount}`);
+  console.log(
+    `  users=${userCount}  teams=${teamCount}  memberships=${memberCount}  ` +
+      `projects=${projectCount}  tasks=${taskCount} (+${totalTasks} nuevas)  activity=${activityCount}`,
+  );
 
   printSummary();
 

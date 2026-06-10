@@ -7,7 +7,12 @@ export const taskController = {
   listByProject: (async (req, res, next) => {
     try {
       await taskService.assertProjectAccess(getParam(req, 'projectId'), req.user!.id);
-      const tasks = await taskService.listByProject(getParam(req, 'projectId'));
+      // ?archived=true → archived only · ?archived=all → both · default → active only
+      const archivedParam = (req.query.archived as string | undefined)?.toLowerCase();
+      const tasks = await taskService.listByProject(getParam(req, 'projectId'), {
+        archivedOnly: archivedParam === 'true',
+        includeArchived: archivedParam === 'all',
+      });
       res.json(ok(tasks));
     } catch (error) {
       next(error);
@@ -82,6 +87,33 @@ export const taskController = {
         req.body.message,
       );
       res.status(201).json(ok({ comment }));
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler,
+
+  archive: (async (req, res, next) => {
+    try {
+      const task = await taskService.archive(getParam(req, 'taskId'), req.user!.id);
+      res.json(ok({ task }));
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler,
+
+  restore: (async (req, res, next) => {
+    try {
+      const task = await taskService.restore(getParam(req, 'taskId'), req.user!.id);
+      res.json(ok({ task }));
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler,
+
+  remove: (async (req, res, next) => {
+    try {
+      const result = await taskService.delete(getParam(req, 'taskId'), req.user!.id);
+      res.json(ok(result));
     } catch (error) {
       next(error);
     }

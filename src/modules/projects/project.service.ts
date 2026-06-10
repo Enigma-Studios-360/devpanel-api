@@ -3,6 +3,7 @@ import { ProjectModel, type ProjectDocument } from './project.model';
 import { SubscriptionModel } from '../subscriptions/subscription.model';
 import { ActivityLogModel } from '../activity/activity.model';
 import { TeamModel } from '../teams/team.model';
+import { TeamMemberModel } from '../teams/team-member.model';
 import { activityService } from '../activity/activity.service';
 import { taskService } from '../tasks/task.service';
 import { docsService } from '../docs/docs.service';
@@ -66,7 +67,76 @@ const enforceProjectLimit = async (teamId: Types.ObjectId): Promise<void> => {
   }
 };
 
+export interface UserProjectItem {
+  _id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: string;
+  stack: string[];
+  color: string;
+  teamId: string;
+  teamName: string;
+  repositoryUrl: string | null;
+  githubOwner: string | null;
+  updatedAt: string | null;
+}
+
 export const projectService = {
+  /**
+   * Every project across ALL teams the user belongs to, each tagged with its
+   * team name. Powers the global "Proyectos" page so the user can browse
+   * projects without first picking a team.
+   */
+  async listAllForUser(userId: string): Promise<UserProjectItem[]> {
+    const userObjId = new Types.ObjectId(userId);
+    const memberships = await TeamMemberModel.find({
+      user: userObjId,
+      status: 'ACTIVE',
+    })
+      .select('team')
+      .lean();
+    const teamIds = memberships.map((m) => m.team);
+    if (teamIds.length === 0) return [];
+
+    const teams = await TeamModel.find({ _id: { $in: teamIds } })
+      .select('name')
+      .lean<Array<{ _id: Types.ObjectId; name: string }>>();
+    const teamName = new Map(teams.map((t) => [String(t._id), t.name]));
+
+    interface LeanProject {
+      _id: Types.ObjectId;
+      name: string;
+      slug: string;
+      description?: string;
+      status: string;
+      stack?: string[];
+      color?: string;
+      team: Types.ObjectId;
+      repositoryUrl?: string;
+      githubOwner?: string;
+      updatedAt?: Date;
+    }
+    const projects = await ProjectModel.find({ team: { $in: teamIds } })
+      .sort({ status: 1, updatedAt: -1 })
+      .lean<LeanProject[]>();
+
+    return projects.map((p) => ({
+      _id: String(p._id),
+      name: p.name,
+      slug: p.slug,
+      description: p.description ?? null,
+      status: p.status,
+      stack: p.stack ?? [],
+      color: p.color ?? '#3B82F6',
+      teamId: String(p.team),
+      teamName: teamName.get(String(p.team)) ?? '—',
+      repositoryUrl: p.repositoryUrl ?? null,
+      githubOwner: p.githubOwner ?? null,
+      updatedAt: p.updatedAt ? new Date(p.updatedAt).toISOString() : null,
+    }));
+  },
+
   async listByTeam(teamId: string): Promise<ProjectDocument[]> {
     return ProjectModel.find({ team: new Types.ObjectId(teamId) })
       .sort({ archivedAt: 1, createdAt: -1 });

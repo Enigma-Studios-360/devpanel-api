@@ -30,6 +30,7 @@ router.get(
 router.post(
   '/:teamId/projects',
   resolveTeamMembership(),
+  requireTeamRole('OWNER', 'ADMIN'),
   validate(createProjectSchema),
   projectController.create,
 );

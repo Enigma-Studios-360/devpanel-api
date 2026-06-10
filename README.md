@@ -1,6 +1,13 @@
-# DevPanel API
+# DevHub API (carpeta interna `devpanel-api`)
 
-Backend para **DevPanel**, una plataforma SaaS para centralizar la gestión de proyectos de desarrollo. Esta es la **Fase 1: Base técnica funcional**.
+> ⚠️ **README DESACTUALIZADO.** Describe la "Fase 1" inicial y NO refleja el
+> estado real: el backend ya tiene 14 módulos funcionales (auth con roles,
+> equipos, proyectos con cupo por plan, tareas Kanban, docs + generador de
+> README, GitHub vía Octokit, Deploy Wizard a Vercel real, asistente DeepSeek,
+> notificaciones, dashboard). La **fuente de verdad** es el código y
+> `../devpanel_readmes/00_PROMPT_CONTINUAR_PROYECTO.md` (+ `10_FASE_3_5`).
+
+Backend de **DevHub**, plataforma SaaS para centralizar la gestión de proyectos de desarrollo.
 
 ## Stack
 

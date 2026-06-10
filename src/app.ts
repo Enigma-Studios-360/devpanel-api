@@ -22,6 +22,9 @@ import { notificationRouter } from './modules/notifications/notification.routes'
 import { fileRouter } from './modules/files/file.routes';
 import { githubRouter } from './modules/github/github.routes';
 import { deployRouter } from './modules/deploy/deploy.routes';
+import { assistantRouter } from './modules/assistant/assistant.routes';
+import { dashboardRouter } from './modules/dashboard/dashboard.routes';
+import { searchRouter } from './modules/search/search.routes';
 
 export const createApp = (): Express => {
   const app = express();
@@ -72,6 +75,8 @@ export const createApp = (): Express => {
           'files',
           'github',
           'deploy',
+          'assistant',
+          'dashboard',
         ],
       }),
     );
@@ -90,6 +95,9 @@ export const createApp = (): Express => {
   app.use('/api/files', fileRouter);
   app.use('/api/github', githubRouter);
   app.use('/api/deploy', deployRouter);
+  app.use('/api/assistant', assistantRouter);
+  app.use('/api/dashboard', dashboardRouter);
+  app.use('/api/search', searchRouter);
 
   // 404 + error handlers (must be last)
   app.use(notFoundHandler);

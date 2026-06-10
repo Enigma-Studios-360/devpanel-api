@@ -1,10 +1,20 @@
 import { Schema, model, Types, type InferSchemaType, type HydratedDocument } from 'mongoose';
 
+/**
+ * Catálogo cerrado de tipos. Cada nuevo tipo necesita:
+ *   1. Una constante aquí.
+ *   2. (Opcional) un helper en notification.service.ts que sepa
+ *      armar `title`/`message` y `action.url` de forma consistente.
+ *   3. (Opcional) un icono/color en el frontend para que el dropdown
+ *      pueda distinguirlo visualmente.
+ */
 export const NOTIFICATION_TYPES = [
-  'INVITATION',
-  'TASK_ASSIGNED',
-  'COMMENT',
-  'SYSTEM',
+  'INVITATION',         // alguien te invita a un equipo
+  'TASK_ASSIGNED',      // alguien te asigna una tarea
+  'TASK_COMMENT',       // alguien comenta una tarea que tú creaste
+  'DEPLOY_READY',       // un deploy que disparaste terminó READY
+  'DEPLOY_FAILED',      // un deploy que disparaste terminó ERROR
+  'SYSTEM',             // mensaje genérico
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

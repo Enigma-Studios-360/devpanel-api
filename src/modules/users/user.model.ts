@@ -19,6 +19,10 @@ const userSchema = new Schema(
       default: 'ACTIVE',
       index: true,
     },
+    /** GitHub username once the user connects their account via OAuth. */
+    githubLogin: { type: String },
+    /** AES-GCM encrypted GitHub OAuth access token. NEVER returned to clients. */
+    githubTokenEnc: { type: String },
   },
   { timestamps: true },
 );
@@ -29,6 +33,7 @@ userSchema.set('toJSON', {
     const r = ret as Record<string, unknown>;
     r._id = (r._id as { toString(): string }).toString();
     delete r.passwordHash;
+    delete r.githubTokenEnc; // secret — never leaves the server
     return r;
   },
 });

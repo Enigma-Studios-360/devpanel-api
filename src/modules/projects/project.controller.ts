@@ -5,6 +5,16 @@ import { activityService } from '../activity/activity.service';
 import { getParam } from '../../shared/utils/request';
 
 export const projectController = {
+  /** GET /api/projects — all projects across the user's teams (+ team name). */
+  listAll: (async (req, res, next) => {
+    try {
+      const projects = await projectService.listAllForUser(req.user!.id);
+      res.json(ok(projects));
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler,
+
   listByTeam: (async (req, res, next) => {
     try {
       const projects = await projectService.listByTeam(getParam(req, 'teamId'));
@@ -33,7 +43,7 @@ export const projectController = {
         getParam(req, 'projectId'),
         req.user!.id,
       );
-      res.json(ok({ project }));
+      res.json(ok({ project, userRole: req.user!.teamRole ?? null }));
     } catch (error) {
       next(error);
     }
@@ -79,7 +89,15 @@ export const projectController = {
         req.user!.id,
       );
       const data = await projectService.dashboard(getParam(req, 'projectId'));
-      res.json(ok(data));
+      // resolveProjectMembership populates req.user.teamRole upstream.
+      // Exposing it lets the frontend hide/disable role-gated actions
+      // without an extra round-trip.
+      res.json(
+        ok({
+          ...(data as Record<string, unknown>),
+          userRole: req.user!.teamRole ?? null,
+        }),
+      );
     } catch (error) {
       next(error);
     }

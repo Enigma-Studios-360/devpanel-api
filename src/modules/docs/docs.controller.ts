@@ -47,6 +47,18 @@ export const docsController = {
     }
   }) as RequestHandler,
 
+  generateAi: (async (req, res, next) => {
+    try {
+      const doc = await docsService.generateWithAi(
+        getParam(req, 'projectId'),
+        req.user!.id,
+      );
+      res.json(ok({ doc }));
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler,
+
   downloadReadme: (async (req, res, next) => {
     try {
       const { markdown, filename } = await docsService.downloadReadme(

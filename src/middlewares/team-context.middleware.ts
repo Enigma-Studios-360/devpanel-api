@@ -1,9 +1,12 @@
 import type { RequestHandler } from 'express';
 import { Types } from 'mongoose';
 import { TeamMemberModel } from '../modules/teams/team-member.model';
+import { ProjectModel } from '../modules/projects/project.model';
+import { TaskModel } from '../modules/tasks/task.model';
 import {
   BadRequestError,
   ForbiddenError,
+  NotFoundError,
 } from '../shared/errors/http-errors';
 import type { TeamRole } from '../shared/constants/roles';
 import { getParam } from '../shared/utils/request';
@@ -48,7 +51,8 @@ export const resolveTeamMembership = (
 
 /**
  * Requires that the resolved team role is one of `allowed`.
- * Must run after `resolveTeamMembership`.
+ * Must run after `resolveTeamMembership` / `resolveProjectMembership` /
+ * `resolveTaskMembership`.
  */
 export const requireTeamRole = (
   ...allowed: TeamRole[]
@@ -59,5 +63,105 @@ export const requireTeamRole = (
       return next(new ForbiddenError('Insufficient team role'));
     }
     return next();
+  };
+};
+
+/**
+ * Resolves the user's role on the team that owns the project referenced by
+ * `:projectId`. Sets `req.user.teamId` and `req.user.teamRole`.
+ *
+ * Must be mounted AFTER `requireAuth`. Pair with `requireTeamRole(...)` to
+ * gate write endpoints by role (e.g. block VIEWER from creating tasks).
+ *
+ * Notes:
+ * - Returns 404 NotFoundError when the project does not exist, mirroring the
+ *   existing behavior of `task.service.assertProjectAccess`.
+ * - Returns 403 ForbiddenError when the user has no active membership on the
+ *   project's team. Project-level `members[]` is NOT a substitute for team
+ *   membership at this stage.
+ */
+export const resolveProjectMembership = (
+  param: string = 'projectId',
+): RequestHandler => {
+  return async (req, _res, next) => {
+    try {
+      if (!req.user) {
+        return next(new ForbiddenError('Authentication required'));
+      }
+      const projectId = getParam(req, param);
+      if (!projectId || !Types.ObjectId.isValid(projectId)) {
+        return next(new BadRequestError('Invalid project id'));
+      }
+
+      const project = await ProjectModel.findById(projectId).select('_id team').lean();
+      if (!project) {
+        return next(new NotFoundError('Project not found'));
+      }
+
+      const membership = await TeamMemberModel.findOne({
+        team: project.team,
+        user: new Types.ObjectId(req.user.id),
+        status: 'ACTIVE',
+      }).lean();
+
+      if (!membership) {
+        return next(new ForbiddenError('You do not have access to this project'));
+      }
+
+      req.user.teamId = project.team.toString();
+      req.user.teamRole = membership.role as TeamRole;
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  };
+};
+
+/**
+ * Resolves the user's role on the team that owns the task referenced by
+ * `:taskId`. Sets `req.user.teamId` and `req.user.teamRole`.
+ *
+ * Must be mounted AFTER `requireAuth`. Pair with `requireTeamRole(...)` to
+ * gate write endpoints (status change, comments, edit) by role.
+ */
+export const resolveTaskMembership = (
+  param: string = 'taskId',
+): RequestHandler => {
+  return async (req, _res, next) => {
+    try {
+      if (!req.user) {
+        return next(new ForbiddenError('Authentication required'));
+      }
+      const taskId = getParam(req, param);
+      if (!taskId || !Types.ObjectId.isValid(taskId)) {
+        return next(new BadRequestError('Invalid task id'));
+      }
+
+      const task = await TaskModel.findById(taskId).select('_id project').lean();
+      if (!task) {
+        return next(new NotFoundError('Task not found'));
+      }
+
+      const project = await ProjectModel.findById(task.project).select('_id team').lean();
+      if (!project) {
+        return next(new NotFoundError('Project not found'));
+      }
+
+      const membership = await TeamMemberModel.findOne({
+        team: project.team,
+        user: new Types.ObjectId(req.user.id),
+        status: 'ACTIVE',
+      }).lean();
+
+      if (!membership) {
+        return next(new ForbiddenError('You do not have access to this task'));
+      }
+
+      req.user.teamId = project.team.toString();
+      req.user.teamRole = membership.role as TeamRole;
+      return next();
+    } catch (error) {
+      return next(error);
+    }
   };
 };

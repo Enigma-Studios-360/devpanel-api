@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middlewares/auth.middleware';
 import { validate } from '../../middlewares/validate.middleware';
+import {
+  resolveProjectMembership,
+  requireTeamRole,
+} from '../../middlewares/team-context.middleware';
 import { projectController } from './project.controller';
 import { updateProjectSchema } from './project.validation';
 import { taskController } from '../tasks/task.controller';
@@ -12,41 +16,142 @@ import {
   linkRepoSchema,
   createIssueSchema,
 } from '../github/github.validation';
+import { deployController } from '../deploy/deploy.controller';
+import { triggerDeploySchema } from '../deploy/deploy.validation';
 
 const router = Router();
 router.use(requireAuth);
 
-router.get('/:projectId', projectController.get);
-router.patch('/:projectId', validate(updateProjectSchema), projectController.patch);
-router.post('/:projectId/archive', projectController.archive);
-router.get('/:projectId/dashboard', projectController.dashboard);
-router.get('/:projectId/activity', projectController.activity);
+// Role contract (see devpanel_readmes/04_ORGANIZACION_DEL_EQUIPO.md):
+//   OWNER, ADMIN     -> project settings (edit, archive, link/unlink repo)
+//   OWNER, ADMIN, DEVELOPER -> work artifacts (tasks, comments, docs, issues)
+//   VIEWER           -> read-only (any GET)
+// `resolveProjectMembership` populates req.user.teamRole; `requireTeamRole`
+// rejects with 403 INSUFFICIENT_ROLE before the controller runs.
 
-// Tasks scoped by project
-router.get('/:projectId/tasks', taskController.listByProject);
+// --- All projects for the user (global "Proyectos" page) ----------------------
+
+router.get('/', projectController.listAll);
+
+// --- Project read / settings --------------------------------------------------
+
+router.get('/:projectId', resolveProjectMembership(), projectController.get);
+router.patch(
+  '/:projectId',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN'),
+  validate(updateProjectSchema),
+  projectController.patch,
+);
+router.post(
+  '/:projectId/archive',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN'),
+  projectController.archive,
+);
+router.get('/:projectId/dashboard', resolveProjectMembership(), projectController.dashboard);
+router.get('/:projectId/activity', resolveProjectMembership(), projectController.activity);
+
+// --- Tasks scoped by project --------------------------------------------------
+
+router.get('/:projectId/tasks', resolveProjectMembership(), taskController.listByProject);
 router.post(
   '/:projectId/tasks',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN', 'DEVELOPER'),
   validate(createTaskSchema),
   taskController.create,
 );
 
-// Docs scoped by project
-router.get('/:projectId/docs', docsController.get);
-router.patch('/:projectId/docs', validate(updateDocSchema), docsController.patch);
-router.post('/:projectId/docs/generate-readme', docsController.generateReadme);
-router.get('/:projectId/docs/download-readme', docsController.downloadReadme);
+// --- Docs scoped by project ---------------------------------------------------
 
-// GitHub scoped by project
-router.post('/:projectId/github/link', validate(linkRepoSchema), githubController.link);
-router.post('/:projectId/github/unlink', githubController.unlink);
-router.get('/:projectId/github/repo', githubController.info);
-router.get('/:projectId/github/commits', githubController.commits);
-router.get('/:projectId/github/branches', githubController.branches);
-router.get('/:projectId/github/issues', githubController.issues);
+router.get('/:projectId/docs', resolveProjectMembership(), docsController.get);
+router.patch(
+  '/:projectId/docs',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN', 'DEVELOPER'),
+  validate(updateDocSchema),
+  docsController.patch,
+);
+router.post(
+  '/:projectId/docs/generate-readme',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN', 'DEVELOPER'),
+  docsController.generateReadme,
+);
+router.post(
+  '/:projectId/docs/generate-ai',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN', 'DEVELOPER'),
+  docsController.generateAi,
+);
+router.get(
+  '/:projectId/docs/download-readme',
+  resolveProjectMembership(),
+  docsController.downloadReadme,
+);
+
+// --- GitHub scoped by project -------------------------------------------------
+
+router.post(
+  '/:projectId/github/link',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN'),
+  validate(linkRepoSchema),
+  githubController.link,
+);
+router.post(
+  '/:projectId/github/unlink',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN'),
+  githubController.unlink,
+);
+router.get('/:projectId/github/repo', resolveProjectMembership(), githubController.info);
+router.get('/:projectId/github/commits', resolveProjectMembership(), githubController.commits);
+router.get('/:projectId/github/branches', resolveProjectMembership(), githubController.branches);
+router.get('/:projectId/github/issues', resolveProjectMembership(), githubController.issues);
+// Stack detection: read-only, any team member can run it.
+router.get(
+  '/:projectId/github/detect-stack',
+  resolveProjectMembership(),
+  githubController.detectStack,
+);
 router.post(
   '/:projectId/github/issues',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN', 'DEVELOPER'),
   validate(createIssueSchema),
   githubController.createIssue,
+);
+
+// --- Deploy (Vercel wizard) ---------------------------------------------------
+// Read-only endpoints are open to any project member (incl. VIEWER) so they
+// can see deployment status and history. Triggers and refresh-on-demand are
+// reserved to OWNER/ADMIN because they touch the Vercel account and burn API
+// quota.
+
+router.get(
+  '/:projectId/deploy',
+  resolveProjectMembership(),
+  deployController.history,
+);
+router.get(
+  '/:projectId/deploy/prepare',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN'),
+  deployController.prepare,
+);
+router.post(
+  '/:projectId/deploy/trigger',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN'),
+  validate(triggerDeploySchema),
+  deployController.trigger,
+);
+router.post(
+  '/:projectId/deploy/:deploymentId/refresh',
+  resolveProjectMembership(),
+  deployController.refresh,
 );
 
 export const projectRouter = router;

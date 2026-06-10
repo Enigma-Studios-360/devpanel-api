@@ -1,19 +1,17 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middlewares/auth.middleware';
-import { ok } from '../../shared/types/api-response';
+import { deployController } from './deploy.controller';
 
+/**
+ * Top-level deploy router. Endpoints scoped to a project live in
+ * project.routes.ts so the membership/role middleware can apply
+ * consistently with the rest of the project-scoped surface.
+ *
+ * Here we only expose unscoped probes (status). Keep it small.
+ */
 const router = Router();
 router.use(requireAuth);
 
-// TODO(phase-7):
-// GET   /api/projects/:projectId/deploy
-// PATCH /api/projects/:projectId/deploy
-// POST  /api/projects/:projectId/deploy/detect-stack
-// POST  /api/projects/:projectId/deploy/generate-guide
-// PATCH /api/projects/:projectId/deploy/steps/:stepId
-
-router.get('/_placeholder', (_req, res) => {
-  res.json(ok({ module: 'deploy', status: 'scaffold' }));
-});
+router.get('/status', deployController.status);
 
 export const deployRouter = router;

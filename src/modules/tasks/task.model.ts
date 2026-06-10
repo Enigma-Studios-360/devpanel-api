@@ -23,6 +23,13 @@ const taskSchema = new Schema(
     githubIssueNumber: { type: Number },
     attachments: [{ type: Types.ObjectId, ref: 'ProjectFile' }],
     createdBy: { type: Types.ObjectId, ref: 'User', required: true },
+    /**
+     * Soft-archive timestamp. Archived tasks are excluded from the default
+     * board listing but stay queryable via `?archived=true`. Different from
+     * the `DONE` status — a DONE task is finished work, an archived task
+     * is hidden from the board.
+     */
+    archivedAt: { type: Date, default: null, index: true },
   },
   { timestamps: true },
 );

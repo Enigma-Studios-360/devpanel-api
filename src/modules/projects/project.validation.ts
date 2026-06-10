@@ -16,7 +16,7 @@ export const createProjectSchema = z.object({
     .optional(),
   repositoryUrl: z.string().url().optional().or(z.literal('').transform(() => undefined)),
   color: z.string().optional(),
-});
+}).strict();
 
 export const updateProjectSchema = createProjectSchema.partial();
 

@@ -1,6 +1,8 @@
 import { Octokit } from 'octokit';
 import { Types } from 'mongoose';
 import { env } from '../../config/env';
+import { UserModel } from '../users/user.model';
+import { decryptSecret } from '../../shared/utils/crypto';
 import { ProjectModel, type ProjectDocument } from '../projects/project.model';
 import { SubscriptionModel } from '../subscriptions/subscription.model';
 import { TeamMemberModel } from '../teams/team-member.model';
@@ -12,6 +14,12 @@ import {
   NotFoundError,
   PlanLimitError,
 } from '../../shared/errors/http-errors';
+import {
+  STACK_RULES,
+  MANIFEST_FILES,
+  type StackRule,
+  type StackSignal,
+} from './stack-rules';
 
 interface RepoCoords {
   owner: string;
@@ -61,13 +69,57 @@ export interface IssueItem {
   isPullRequest: boolean;
 }
 
+export interface StackEvidence {
+  /** Human-readable signal: "package.json: next@14.0.0" or "next.config.ts present". */
+  description: string;
+  /** Path to the file that triggered this signal, if applicable. */
+  file?: string;
+}
+
+export interface StackMatch {
+  id: string;
+  name: string;
+  category: string;
+  hint?: string;
+  icon?: string;
+  /** 0–1 confidence based on number of signals fired. */
+  confidence: number;
+  /** Each signal that contributed to the match. */
+  evidence: StackEvidence[];
+}
+
+export interface StackDetectionResult {
+  /** All matches with non-zero confidence, sorted descending. */
+  matches: StackMatch[];
+  /** First match (best confidence) if any — shortcut for the UI. */
+  primary: StackMatch | null;
+  /** Repo branch the detection was run against. */
+  branch: string;
+  /** When the scan finished (server time). */
+  detectedAt: string;
+  /** True when no rule matched anything — useful for "couldn't detect" UI copy. */
+  empty: boolean;
+}
+
 // ---------------------------------------------------------------------------
 
-const githubClient = (): Octokit => {
-  // We use a single PAT from env. In Phase 9 this becomes per-team OAuth.
-  return env.githubToken
-    ? new Octokit({ auth: env.githubToken })
-    : new Octokit();
+/** Decrypted GitHub OAuth token for a user, or null if not connected. */
+const userGithubToken = async (userId?: string): Promise<string | null> => {
+  if (!userId) return null;
+  const user = await UserModel.findById(userId).select('githubTokenEnc').lean();
+  return user?.githubTokenEnc ? decryptSecret(user.githubTokenEnc) : null;
+};
+
+/**
+ * Octokit client for a request. Prefers the calling user's connected GitHub
+ * token (per-user OAuth) so private repos and "create issue as me" work;
+ * falls back to the shared GITHUB_TOKEN PAT, then to anonymous (public, but
+ * heavily rate-limited).
+ */
+const githubClient = async (userId?: string): Promise<Octokit> => {
+  const userToken = await userGithubToken(userId);
+  if (userToken) return new Octokit({ auth: userToken });
+  return env.githubToken ? new Octokit({ auth: env.githubToken }) : new Octokit();
 };
 
 const parseUrl = (input: string): RepoCoords | null => {
@@ -164,7 +216,7 @@ export const githubService = {
       );
     }
 
-    const octokit = githubClient();
+    const octokit = await githubClient(userId);
     let info: PublicRepoInfo;
     try {
       const { data } = await octokit.rest.repos.get(coords);
@@ -237,7 +289,7 @@ export const githubService = {
   async getRepoInfo(projectId: string, userId: string): Promise<PublicRepoInfo> {
     const { project } = await assertProjectAccess(projectId, userId);
     const coords = requireLinked(project);
-    const octokit = githubClient();
+    const octokit = await githubClient(userId);
     try {
       const { data } = await octokit.rest.repos.get(coords);
       return {
@@ -258,6 +310,57 @@ export const githubService = {
     }
   },
 
+  /**
+   * Compact text snapshot of the repo (info + root files + README +
+   * package.json) for feeding the AI doc generator. Best-effort: missing
+   * pieces are simply skipped.
+   */
+  async getAiRepoContext(projectId: string, userId: string): Promise<string> {
+    const { project } = await assertProjectAccess(projectId, userId);
+    const coords = requireLinked(project);
+    const octokit = await githubClient(userId);
+
+    const parts: string[] = [`Repositorio: ${coords.owner}/${coords.repo}`];
+
+    try {
+      const { data } = await octokit.rest.repos.get(coords);
+      if (data.description) parts.push(`Descripción: ${data.description}`);
+      if (data.language) parts.push(`Lenguaje principal: ${data.language}`);
+      parts.push(`Rama por defecto: ${data.default_branch}`);
+    } catch (error) {
+      return wrapGithubError(error);
+    }
+
+    try {
+      const { data } = await octokit.rest.repos.getContent({ ...coords, path: '' });
+      if (Array.isArray(data)) {
+        parts.push(`Archivos en la raíz: ${data.map((f) => f.name).join(', ')}`);
+      }
+    } catch {
+      /* no root listing — skip */
+    }
+
+    try {
+      const { data } = await octokit.rest.repos.getReadme(coords);
+      const readme = Buffer.from(data.content, 'base64').toString('utf8').slice(0, 6000);
+      if (readme.trim()) parts.push(`\n--- README actual ---\n${readme}`);
+    } catch {
+      /* no README — skip */
+    }
+
+    try {
+      const { data } = await octokit.rest.repos.getContent({ ...coords, path: 'package.json' });
+      if (!Array.isArray(data) && data.type === 'file' && data.content) {
+        const pkg = Buffer.from(data.content, 'base64').toString('utf8').slice(0, 3000);
+        parts.push(`\n--- package.json ---\n${pkg}`);
+      }
+    } catch {
+      /* no package.json — skip */
+    }
+
+    return parts.join('\n');
+  },
+
   async listCommits(
     projectId: string,
     userId: string,
@@ -265,7 +368,7 @@ export const githubService = {
   ): Promise<CommitItem[]> {
     const { project } = await assertProjectAccess(projectId, userId);
     const coords = requireLinked(project);
-    const octokit = githubClient();
+    const octokit = await githubClient(userId);
     try {
       const { data } = await octokit.rest.repos.listCommits({
         ...coords,
@@ -299,7 +402,7 @@ export const githubService = {
   ): Promise<BranchItem[]> {
     const { project } = await assertProjectAccess(projectId, userId);
     const coords = requireLinked(project);
-    const octokit = githubClient();
+    const octokit = await githubClient(userId);
     try {
       const { data } = await octokit.rest.repos.listBranches({
         ...coords,
@@ -326,7 +429,7 @@ export const githubService = {
   ): Promise<IssueItem[]> {
     const { project } = await assertProjectAccess(projectId, userId);
     const coords = requireLinked(project);
-    const octokit = githubClient();
+    const octokit = await githubClient(userId);
     try {
       const { data } = await octokit.rest.issues.listForRepo({
         ...coords,
@@ -358,6 +461,184 @@ export const githubService = {
     }
   },
 
+  /**
+   * Inspect the linked repository's root tree + a curated set of manifest
+   * files, then run every rule from `STACK_RULES` against the collected
+   * evidence. Returns matches with confidence scores and per-signal
+   * evidence. Designed to be ~2-5 GitHub API calls regardless of repo size:
+   * one tree read at the default branch, then one content read per manifest
+   * actually present at the root.
+   */
+  async detectStack(
+    projectId: string,
+    userId: string,
+  ): Promise<StackDetectionResult> {
+    const { project } = await assertProjectAccess(projectId, userId);
+    const coords = requireLinked(project);
+    const branch = project.defaultBranch || 'main';
+    const octokit = await githubClient(userId);
+
+    // 1) Read the root tree (recursive=false, just root entries).
+    let rootFiles: Set<string>;
+    try {
+      const { data } = await octokit.rest.git.getTree({
+        ...coords,
+        tree_sha: branch,
+      });
+      // Octokit's strict types collapse `tree` to `never[]` under our TS
+      // config, so we narrow to the shape we actually need.
+      const entries = (data.tree ?? []) as Array<{
+        type?: string;
+        path?: string;
+      }>;
+      rootFiles = new Set(
+        entries
+          .filter((entry) => entry.type === 'blob' && !!entry.path)
+          .map((entry) => entry.path as string),
+      );
+    } catch (error) {
+      return wrapGithubError(error);
+    }
+
+    // 2) Pull the content of every manifest that's actually present.
+    //    We never read non-manifest files — keeps the API budget bounded.
+    const manifestContent = new Map<string, string>();
+    const presentManifests = MANIFEST_FILES.filter((m) => rootFiles.has(m));
+    await Promise.all(
+      presentManifests.map(async (path) => {
+        try {
+          const { data } = await octokit.rest.repos.getContent({
+            ...coords,
+            path,
+            ref: branch,
+          });
+          if (
+            !Array.isArray(data) &&
+            'content' in data &&
+            typeof data.content === 'string'
+          ) {
+            const text = Buffer.from(data.content, 'base64').toString('utf-8');
+            manifestContent.set(path, text);
+          }
+        } catch {
+          // Best-effort: a missing or oversized file isn't fatal — the rule
+          // simply won't match that signal.
+        }
+      }),
+    );
+
+    // 3) Parse package.json once for the dependency-based rules.
+    const packageJson = manifestContent.get('package.json');
+    let nodeDeps: Record<string, string> = {};
+    if (packageJson) {
+      try {
+        const parsed = JSON.parse(packageJson) as {
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+          peerDependencies?: Record<string, string>;
+        };
+        nodeDeps = {
+          ...(parsed.dependencies ?? {}),
+          ...(parsed.devDependencies ?? {}),
+          ...(parsed.peerDependencies ?? {}),
+        };
+      } catch {
+        // Malformed package.json: treat as no deps. The user's actual repo
+        // is broken; we won't crash detection over it.
+      }
+    }
+
+    // 4) Run rules.
+    const matches: StackMatch[] = [];
+    for (const rule of STACK_RULES) {
+      const evidence = this.collectEvidence(
+        rule,
+        rootFiles,
+        manifestContent,
+        nodeDeps,
+      );
+      if (evidence.length === 0) continue;
+      const rawConfidence = evidence.length * rule.perSignalConfidence;
+      const confidence = Math.min(1, Math.round(rawConfidence * 100) / 100);
+      matches.push({
+        id: rule.id,
+        name: rule.name,
+        category: rule.category,
+        hint: rule.hint,
+        icon: rule.icon,
+        confidence,
+        evidence,
+      });
+    }
+    matches.sort((a, b) => b.confidence - a.confidence);
+
+    return {
+      matches,
+      primary: matches[0] ?? null,
+      branch,
+      detectedAt: new Date().toISOString(),
+      empty: matches.length === 0,
+    };
+  },
+
+  /**
+   * Pure helper: turn a rule + collected facts into the list of triggered
+   * signals (with human-readable evidence). Kept as a method on the
+   * service so unit tests can mock it without touching Octokit.
+   */
+  collectEvidence(
+    rule: StackRule,
+    rootFiles: Set<string>,
+    manifestContent: Map<string, string>,
+    nodeDeps: Record<string, string>,
+  ): StackEvidence[] {
+    const out: StackEvidence[] = [];
+    for (const signal of rule.signals) {
+      const ev = this.evaluateSignal(signal, rootFiles, manifestContent, nodeDeps);
+      if (ev) out.push(ev);
+    }
+    return out;
+  },
+
+  evaluateSignal(
+    signal: StackSignal,
+    rootFiles: Set<string>,
+    manifestContent: Map<string, string>,
+    nodeDeps: Record<string, string>,
+  ): StackEvidence | null {
+    switch (signal.type) {
+      case 'fileExists': {
+        if (rootFiles.has(signal.path)) {
+          return { description: `${signal.path} presente`, file: signal.path };
+        }
+        return null;
+      }
+      case 'dep': {
+        const version = nodeDeps[signal.dep];
+        if (version) {
+          return {
+            description: `package.json: ${signal.dep}@${version}`,
+            file: 'package.json',
+          };
+        }
+        return null;
+      }
+      case 'fileContent': {
+        const content = manifestContent.get(signal.path);
+        if (!content) return null;
+        if (signal.pattern.test(content)) {
+          return {
+            description: `${signal.path} contiene patrón "${signal.pattern.source}"`,
+            file: signal.path,
+          };
+        }
+        return null;
+      }
+      default:
+        return null;
+    }
+  },
+
   async createIssue(
     projectId: string,
     userId: string,
@@ -373,7 +654,7 @@ export const githubService = {
         'GITHUB_NO_TOKEN',
       );
     }
-    const octokit = githubClient();
+    const octokit = await githubClient(userId);
     try {
       const { data } = await octokit.rest.issues.create({
         ...coords,

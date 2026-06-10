@@ -1,16 +1,17 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middlewares/auth.middleware';
-import { ok } from '../../shared/types/api-response';
+import { notificationController } from './notification.controller';
 
 const router = Router();
 router.use(requireAuth);
 
-// TODO(phase-2/3):
-// GET    /api/notifications
-// PATCH  /api/notifications/:id/read
+// Bell dropdown — supports ?onlyUnread=true&page=1&perPage=20.
+router.get('/', notificationController.list);
+// Cheap probe the topbar polls every ~30s.
+router.get('/unread-count', notificationController.unreadCount);
 
-router.get('/_placeholder', (_req, res) => {
-  res.json(ok({ module: 'notifications', status: 'scaffold' }));
-});
+router.post('/mark-all-read', notificationController.markAllRead);
+router.post('/:id/read', notificationController.markRead);
+router.delete('/:id', notificationController.remove);
 
 export const notificationRouter = router;
