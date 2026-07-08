@@ -5,6 +5,7 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
+  workflow_dispatch: # permite ejecución manual desde la pestaña Actions
 
 jobs:
   build:

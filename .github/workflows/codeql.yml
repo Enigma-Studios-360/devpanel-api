@@ -7,6 +7,7 @@ on:
     branches: [main, dev]
   schedule:
     - cron: '0 6 * * 1' # análisis semanal (lunes 6:00 UTC)
+  workflow_dispatch: # permite ejecución manual desde la pestaña Actions
 
 jobs:
   analyze:
