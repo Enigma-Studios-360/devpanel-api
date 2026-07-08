@@ -25,6 +25,7 @@ import { deployRouter } from './modules/deploy/deploy.routes';
 import { assistantRouter } from './modules/assistant/assistant.routes';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 import { searchRouter } from './modules/search/search.routes';
+import { arcadeRouter } from './modules/arcade/arcade.routes';
 
 export const createApp = (): Express => {
   const app = express();
@@ -77,6 +78,7 @@ export const createApp = (): Express => {
           'deploy',
           'assistant',
           'dashboard',
+          'arcade',
         ],
       }),
     );
@@ -98,6 +100,7 @@ export const createApp = (): Express => {
   app.use('/api/assistant', assistantRouter);
   app.use('/api/dashboard', dashboardRouter);
   app.use('/api/search', searchRouter);
+  app.use('/api/arcade', arcadeRouter);
 
   // 404 + error handlers (must be last)
   app.use(notFoundHandler);
