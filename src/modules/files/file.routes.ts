@@ -1,17 +1,26 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middlewares/auth.middleware';
-import { ok } from '../../shared/types/api-response';
+import {
+  resolveFileMembership,
+  requireTeamRole,
+} from '../../middlewares/team-context.middleware';
+import { fileController } from './file.controller';
 
 const router = Router();
 router.use(requireAuth);
 
-// TODO(phase-3/4):
-// GET    /api/projects/:projectId/files
-// POST   /api/projects/:projectId/files   (multipart, multer)
-// DELETE /api/files/:fileId
+// Role contract:
+//   any member (incl. VIEWER) -> download
+//   OWNER, ADMIN              -> delete (destructive, frees storage)
+// Upload + list live under /api/projects/:projectId/files (project.routes.ts).
 
-router.get('/_placeholder', (_req, res) => {
-  res.json(ok({ module: 'files', status: 'scaffold' }));
-});
+router.get('/:fileId/download', resolveFileMembership(), fileController.download);
+
+router.delete(
+  '/:fileId',
+  resolveFileMembership(),
+  requireTeamRole('OWNER', 'ADMIN'),
+  fileController.remove,
+);
 
 export const fileRouter = router;

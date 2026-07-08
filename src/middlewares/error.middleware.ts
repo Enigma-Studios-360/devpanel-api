@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
 import { ZodError } from 'zod';
+import { MulterError } from 'multer';
 import { AppError } from '../shared/errors/AppError';
 import { fail } from '../shared/types/api-response';
 import { isProduction } from '../config/env';
@@ -14,6 +15,18 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof ZodError) {
     res.status(422).json(
       fail('VALIDATION_ERROR', 'Validation failed', err.issues),
+    );
+    return;
+  }
+
+  if (err instanceof MulterError) {
+    res.status(400).json(
+      fail(
+        'UPLOAD_ERROR',
+        err.code === 'LIMIT_FILE_SIZE'
+          ? 'El archivo excede el límite de 10 MB por archivo'
+          : err.message,
+      ),
     );
     return;
   }

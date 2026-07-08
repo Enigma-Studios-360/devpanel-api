@@ -196,6 +196,36 @@ export const activityService = {
     });
   },
 
+  async logFileUploaded(
+    teamId: string | Types.ObjectId,
+    projectId: string | Types.ObjectId,
+    actorId: string | Types.ObjectId,
+    fileName: string,
+  ): Promise<void> {
+    await safeLog({
+      actor: actorId,
+      team: teamId,
+      project: projectId,
+      type: 'FILE_UPLOADED',
+      message: `Archivo "${fileName}" subido`,
+    });
+  },
+
+  async logFileDeleted(
+    teamId: string | Types.ObjectId,
+    projectId: string | Types.ObjectId,
+    actorId: string | Types.ObjectId,
+    fileName: string,
+  ): Promise<void> {
+    await safeLog({
+      actor: actorId,
+      team: teamId,
+      project: projectId,
+      type: 'FILE_DELETED',
+      message: `Archivo "${fileName}" eliminado`,
+    });
+  },
+
   async logSubscriptionChanged(
     teamId: string | Types.ObjectId,
     actorId: string | Types.ObjectId,

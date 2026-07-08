@@ -18,6 +18,8 @@ import {
 } from '../github/github.validation';
 import { deployController } from '../deploy/deploy.controller';
 import { triggerDeploySchema } from '../deploy/deploy.validation';
+import { fileController } from '../files/file.controller';
+import { upload } from '../../config/storage';
 
 const router = Router();
 router.use(requireAuth);
@@ -89,6 +91,19 @@ router.get(
   '/:projectId/docs/download-readme',
   resolveProjectMembership(),
   docsController.downloadReadme,
+);
+
+// --- Files scoped by project ----------------------------------------------------
+// List is open to any member (incl. VIEWER); upload requires a contributor
+// role. Per-file download/delete live in file.routes.ts (/api/files/:fileId).
+
+router.get('/:projectId/files', resolveProjectMembership(), fileController.listByProject);
+router.post(
+  '/:projectId/files',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN', 'DEVELOPER'),
+  upload.single('file'),
+  fileController.upload,
 );
 
 // --- GitHub scoped by project -------------------------------------------------

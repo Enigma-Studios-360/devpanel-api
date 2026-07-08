@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { TeamMemberModel } from '../modules/teams/team-member.model';
 import { ProjectModel } from '../modules/projects/project.model';
 import { TaskModel } from '../modules/tasks/task.model';
+import { ProjectFileModel } from '../modules/files/file.model';
 import {
   BadRequestError,
   ForbiddenError,
@@ -124,6 +125,55 @@ export const resolveProjectMembership = (
  * Must be mounted AFTER `requireAuth`. Pair with `requireTeamRole(...)` to
  * gate write endpoints (status change, comments, edit) by role.
  */
+/**
+ * Resolves the user's role on the team that owns the file referenced by
+ * `:fileId`. Sets `req.user.teamId` and `req.user.teamRole`.
+ *
+ * Must be mounted AFTER `requireAuth`. Pair with `requireTeamRole(...)` to
+ * gate destructive endpoints (delete) by role.
+ */
+export const resolveFileMembership = (
+  param: string = 'fileId',
+): RequestHandler => {
+  return async (req, _res, next) => {
+    try {
+      if (!req.user) {
+        return next(new ForbiddenError('Authentication required'));
+      }
+      const fileId = getParam(req, param);
+      if (!fileId || !Types.ObjectId.isValid(fileId)) {
+        return next(new BadRequestError('Invalid file id'));
+      }
+
+      const file = await ProjectFileModel.findById(fileId).select('_id project').lean();
+      if (!file) {
+        return next(new NotFoundError('File not found'));
+      }
+
+      const project = await ProjectModel.findById(file.project).select('_id team').lean();
+      if (!project) {
+        return next(new NotFoundError('Project not found'));
+      }
+
+      const membership = await TeamMemberModel.findOne({
+        team: project.team,
+        user: new Types.ObjectId(req.user.id),
+        status: 'ACTIVE',
+      }).lean();
+
+      if (!membership) {
+        return next(new ForbiddenError('You do not have access to this file'));
+      }
+
+      req.user.teamId = project.team.toString();
+      req.user.teamRole = membership.role as TeamRole;
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  };
+};
+
 export const resolveTaskMembership = (
   param: string = 'taskId',
 ): RequestHandler => {
