@@ -39,6 +39,13 @@ const deploymentSchema = new Schema(
 
     /** Public URL of the deployment, populated when status reaches READY. */
     url: { type: String },
+    /**
+     * Stable production URL of the Vercel project (`https://<name>.vercel.app`).
+     * Unlike `url` (per-deployment, may sit behind Vercel's deployment
+     * protection), this one always points at the latest production build and
+     * is what end users / QR codes should get.
+     */
+    publicUrl: { type: String },
     /** Direct link to the build/logs view on vercel.com. */
     inspectorUrl: { type: String },
 

@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { Octokit } from 'octokit';
 import { env } from '../../config/env';
 import { AppError } from '../../shared/errors/AppError';
 import {
@@ -241,6 +242,16 @@ const vercelFetch = async <T>(
         'DEPLOY_UPSTREAM_RATE_LIMIT',
       );
     }
+    // Special case: the Vercel ACCOUNT has no GitHub identity linked
+    // ("Login Connection"). Installing the GitHub app is not enough —
+    // Vercel can't associate the installation with this account.
+    if (detail.toLowerCase().includes('login connection')) {
+      throw new AppError(
+        'Tu cuenta de Vercel no está conectada a GitHub. En vercel.com entra a Account Settings → Authentication y conecta tu cuenta de GitHub (Login Connection); después reintenta el deploy.',
+        502,
+        'DEPLOY_VERCEL_GITHUB_UNLINKED',
+      );
+    }
     // Special case: missing GitHub install. Surface a clear CTA so the
     // UI can render setup instructions instead of a generic error.
     if (
@@ -455,6 +466,15 @@ export const deployService = {
       });
     }
 
+    // 2.5) Make deployment URLs public (best-effort): Vercel enables
+    //      "Deployment Protection" by default, which puts per-deployment
+    //      URLs behind a Vercel login. Our users get the production URL,
+    //      but we also lift the protection so nothing ever asks for login.
+    await this.disableDeploymentProtection(vercelProject.id).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[deploy] protection opt-out failed:', (err as Error).message);
+    });
+
     // 3) Push environment variables if any (best-effort; we don't crash
     //    the deploy on a single bad value).
     if (input.envVars && input.envVars.length > 0) {
@@ -464,12 +484,13 @@ export const deployService = {
       });
     }
 
-    // 4) Trigger a deployment from the configured branch.
+    // 4) Trigger a deployment from the configured branch. Vercel's v13 API
+    //    identifies the repo by its numeric GitHub id, so resolve it first.
+    const repoId = await this.getGithubRepoId(owner, repo);
     const deployment = await this.createDeployment({
       vercelProjectId: vercelProject.id,
       vercelProjectName: projectName,
-      owner,
-      repo,
+      repoId,
       branch,
     });
 
@@ -483,6 +504,7 @@ export const deployService = {
       vercelProjectId: vercelProject.id,
       vercelProjectName: projectName,
       url: deployment.url ? `https://${deployment.url}` : undefined,
+      publicUrl: `https://${projectName}.vercel.app`,
       inspectorUrl: deployment.inspectorUrl,
       status: mapVercelStatus(deployment.readyState ?? deployment.state),
       framework: input.framework,
@@ -690,6 +712,18 @@ export const deployService = {
     return { id: data.id, name: data.name ?? name };
   },
 
+  /**
+   * Turns off Vercel's "Deployment Protection" (SSO auth wall) for the
+   * project so per-deployment URLs are publicly reachable, same as the
+   * production domain. Idempotent; safe to call on every trigger.
+   */
+  async disableDeploymentProtection(vercelProjectId: string): Promise<void> {
+    await vercelFetch(
+      `/v9/projects/${encodeURIComponent(vercelProjectId)}${teamQuery()}`,
+      { method: 'PATCH', body: JSON.stringify({ ssoProtection: null }) },
+    );
+  },
+
   async upsertEnvVars(
     vercelProjectId: string,
     pairs: Array<{ key: string; value: string }>,
@@ -714,15 +748,29 @@ export const deployService = {
     );
   },
 
+  /** Numeric GitHub repo id — what Vercel's v13 gitSource requires. */
+  async getGithubRepoId(owner: string, repo: string): Promise<number> {
+    const octokit = env.githubToken
+      ? new Octokit({ auth: env.githubToken })
+      : new Octokit();
+    try {
+      const { data } = await octokit.rest.repos.get({ owner, repo });
+      return data.id;
+    } catch {
+      throw new BadRequestError(
+        `No se pudo leer ${owner}/${repo} en GitHub para obtener su id. Revisa el GITHUB_TOKEN.`,
+      );
+    }
+  },
+
   async createDeployment(opts: {
     vercelProjectId: string;
     vercelProjectName: string;
-    owner: string;
-    repo: string;
+    repoId: number;
     branch: string;
   }): Promise<VercelDeploymentShape> {
-    // Vercel needs an integration to know which commit to build. Easiest
-    // path: tell it "project + ref" and let it resolve the SHA from GitHub.
+    // Vercel needs an integration to know which commit to build: project +
+    // numeric repoId + ref, and it resolves the SHA from GitHub itself.
     const body = {
       name: opts.vercelProjectName,
       project: opts.vercelProjectId,
@@ -730,7 +778,7 @@ export const deployService = {
       gitSource: {
         type: 'github',
         ref: opts.branch,
-        repo: `${opts.owner}/${opts.repo}`,
+        repoId: opts.repoId,
       },
     };
     return vercelFetch<VercelDeploymentShape>(
