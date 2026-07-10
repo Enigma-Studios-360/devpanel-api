@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middlewares/auth.middleware';
 import { githubOauthController } from './github-oauth.controller';
+import { githubController } from './github.controller';
 
 const router = Router();
 
@@ -14,5 +15,8 @@ router.get('/oauth/start', requireAuth, githubOauthController.start);
 router.get('/oauth/callback', githubOauthController.callback);
 router.get('/oauth/status', requireAuth, githubOauthController.status);
 router.post('/oauth/disconnect', requireAuth, githubOauthController.disconnect);
+
+// Repo picker: list the repos of the user's CONNECTED GitHub account.
+router.get('/repos', requireAuth, githubController.myRepos);
 
 export const githubRouter = router;

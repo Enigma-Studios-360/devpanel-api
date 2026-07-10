@@ -122,6 +122,53 @@ const githubClient = async (userId?: string): Promise<Octokit> => {
   return env.githubToken ? new Octokit({ auth: env.githubToken }) : new Octokit();
 };
 
+/**
+ * Repos of the AUTHENTICATED user's connected GitHub account, for the
+ * repo-picker UI. Deliberately requires the per-user OAuth token: falling
+ * back to the shared PAT would list the platform's repos to everyone.
+ */
+export const listMyGithubRepos = async (
+  userId: string,
+): Promise<Array<{
+  fullName: string;
+  owner: string;
+  name: string;
+  private: boolean;
+  language: string | null;
+  description: string | null;
+  updatedAt: string | null;
+}>> => {
+  const token = await userGithubToken(userId);
+  if (!token) {
+    throw new BadRequestError(
+      'Conecta tu cuenta de GitHub primero para ver tus repositorios.',
+    );
+  }
+  interface RepoShape {
+    full_name: string;
+    name: string;
+    private?: boolean;
+    language?: string | null;
+    description?: string | null;
+    updated_at?: string | null;
+    owner?: { login?: string } | null;
+  }
+  const octokit = new Octokit({ auth: token });
+  const { data } = await octokit.rest.repos.listForAuthenticatedUser({
+    sort: 'updated',
+    per_page: 100,
+  });
+  return (data as RepoShape[]).map((r) => ({
+    fullName: r.full_name,
+    owner: r.owner?.login ?? '',
+    name: r.name,
+    private: Boolean(r.private),
+    language: r.language ?? null,
+    description: r.description ?? null,
+    updatedAt: r.updated_at ?? null,
+  }));
+};
+
 const parseUrl = (input: string): RepoCoords | null => {
   // Accepts:
   //   - "owner/repo"

@@ -1,9 +1,19 @@
 import type { RequestHandler } from 'express';
-import { githubService } from './github.service';
+import { githubService, listMyGithubRepos } from './github.service';
 import { ok } from '../../shared/types/api-response';
 import { getParam } from '../../shared/utils/request';
 
 export const githubController = {
+  /** GET /api/github/repos — repos of the user's connected GitHub account. */
+  myRepos: (async (req, res, next) => {
+    try {
+      const repos = await listMyGithubRepos(req.user!.id);
+      res.json(ok({ repos }));
+    } catch (error) {
+      next(error);
+    }
+  }) as RequestHandler,
+
   link: (async (req, res, next) => {
     try {
       const info = await githubService.linkRepo(
