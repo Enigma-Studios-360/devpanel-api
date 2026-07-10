@@ -75,7 +75,7 @@ interface FrameworkPresetGuess {
   suggestedEnv: string[];
 }
 
-const PRESET_BY_STACK_ID: Record<string, FrameworkPresetGuess> = {
+export const PRESET_BY_STACK_ID: Record<string, FrameworkPresetGuess> = {
   nextjs: {
     framework: 'nextjs',
     buildCommand: 'next build',

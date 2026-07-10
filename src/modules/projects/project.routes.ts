@@ -19,7 +19,8 @@ import {
 import { deployController } from '../deploy/deploy.controller';
 import { triggerDeploySchema } from '../deploy/deploy.validation';
 import { fileController } from '../files/file.controller';
-import { upload } from '../../config/storage';
+import { upload, uploadProjectZip } from '../../config/storage';
+import { importController } from '../imports/import.controller';
 
 const router = Router();
 router.use(requireAuth);
@@ -104,6 +105,23 @@ router.post(
   requireTeamRole('OWNER', 'ADMIN', 'DEVELOPER'),
   upload.single('file'),
   fileController.upload,
+);
+
+// --- Importar proyecto (ZIP → repo GitHub del usuario) -------------------------
+// Mismo gate que vincular repo: OWNER/ADMIN (es configuración del proyecto).
+
+router.post(
+  '/:projectId/import',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN'),
+  uploadProjectZip.single('file'),
+  importController.analyze,
+);
+router.post(
+  '/:projectId/import/:importId/confirm',
+  resolveProjectMembership(),
+  requireTeamRole('OWNER', 'ADMIN'),
+  importController.confirm,
 );
 
 // --- GitHub scoped by project -------------------------------------------------

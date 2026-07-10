@@ -24,4 +24,27 @@ export const upload = multer({
   },
 });
 
+// "Sube tu proyecto" (import ZIP → GitHub): límite dedicado de 250MB y solo .zip.
+const importsRoot = path.resolve(uploadRoot, 'imports');
+if (!fs.existsSync(importsRoot)) {
+  fs.mkdirSync(importsRoot, { recursive: true });
+}
+
+export const uploadProjectZip = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, importsRoot),
+    filename: (_req, _file, cb) =>
+      cb(null, `staging-${Date.now()}-${Math.round(Math.random() * 1e9)}.zip`),
+  }),
+  limits: { fileSize: 250 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const isZip =
+      /\.zip$/i.test(file.originalname) ||
+      file.mimetype === 'application/zip' ||
+      file.mimetype === 'application/x-zip-compressed';
+    if (isZip) cb(null, true);
+    else cb(new Error('Solo se aceptan archivos .zip'));
+  },
+});
+
 export const uploadDirectory = uploadRoot;
