@@ -60,7 +60,7 @@ npm run db:seed
 
 Cuentas demo (password compartido `password123`):
 
-| Email | Rol en "DevPanel Demo" |
+| Email | Rol en "DevHub Demo" |
 |---|---|
 | `owner@devpanel.dev` | OWNER |
 | `admin@devpanel.dev` | ADMIN |

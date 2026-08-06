@@ -36,17 +36,18 @@ está aprendiendo — los PRs de principiantes son bienvenidos de verdad.
 
 ## Licencia de tus contribuciones
 
-Al abrir un pull request:
+Usamos el modelo estándar **inbound = outbound** con **DCO** (sin CLA):
 
-1. Certificas el **Developer Certificate of Origin (DCO)**: que tienes derecho a
-   contribuir ese código (es tuyo o compatible con AGPLv3).
-2. Aceptas que tu contribución se licencia bajo **AGPL-3.0** como el resto del proyecto.
-3. Otorgas a los mantenedores de DevHub (equipo enigma) una licencia perpetua,
-   mundial, no exclusiva y libre de regalías para usar, modificar y **relicenciar**
-   tu contribución — esto nos permite ofrecer en el futuro una versión en la nube
-   sin fragmentar el proyecto.
+1. Firma cada commit con `git commit -s`, que agrega la línea
+   `Signed-off-by: Tu Nombre <tu@email>`. Con ella certificas el
+   **Developer Certificate of Origin**: que tienes derecho a contribuir ese
+   código (es tuyo o compatible con AGPLv3).
+2. Tu contribución queda licenciada bajo **AGPL-3.0-only** — la misma licencia
+   del proyecto, ni más ni menos.
 
-Si no estás de acuerdo con el punto 3, dilo en el PR y lo platicamos antes de mergear.
+No pedimos cesión de derechos ni licencias extra: tu código sigue siendo tuyo.
+(La AGPL ya permite al proyecto ofrecer su propia nube gestionada, así que no
+necesitamos nada más.)
 
 ## Reportar bugs y vulnerabilidades
 

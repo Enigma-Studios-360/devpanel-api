@@ -1,7 +1,7 @@
 {
   "name": "devpanel-api",
   "version": "0.1.0",
-  "description": "DevPanel backend - Express + TypeScript + MongoDB Atlas",
+  "description": "DevHub backend - Express + TypeScript + MongoDB Atlas",
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only --exit-child src/server.ts",
@@ -20,8 +20,8 @@
     "typescript",
     "mongodb"
   ],
-  "author": "DevPanel Team",
-  "license": "UNLICENSED",
+  "author": "equipo enigma",
+  "license": "AGPL-3.0-only",
   "private": true,
   "dependencies": {
     "adm-zip": "^0.6.0",
