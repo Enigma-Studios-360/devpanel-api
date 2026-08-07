@@ -27,6 +27,7 @@ import { assistantRouter } from './modules/assistant/assistant.routes';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 import { searchRouter } from './modules/search/search.routes';
 import { arcadeRouter } from './modules/arcade/arcade.routes';
+import { classroomRouter } from './modules/classroom/classroom.routes';
 
 export const createApp = (): Express => {
   const app = express();
@@ -98,6 +99,7 @@ export const createApp = (): Express => {
           'assistant',
           'dashboard',
           'arcade',
+          'classrooms',
         ],
       }),
     );
@@ -120,6 +122,7 @@ export const createApp = (): Express => {
   app.use('/api/dashboard', dashboardRouter);
   app.use('/api/search', searchRouter);
   app.use('/api/arcade', arcadeRouter);
+  app.use('/api/classrooms', classroomRouter);
 
   // 404 + error handlers (must be last)
   app.use(notFoundHandler);

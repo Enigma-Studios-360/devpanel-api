@@ -18,6 +18,11 @@ export const ACTIVITY_TYPES = [
   'TEAM_CREATED',
   'USER_REGISTERED',
   'SUBSCRIPTION_CHANGED',
+  // Classroom module (aula id travels in metadata — classrooms are not teams)
+  'CLASSROOM_CREATED',
+  'CLASSROOM_JOINED',
+  'ASSIGNMENT_CREATED',
+  'SUBMISSION_RECEIVED',
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

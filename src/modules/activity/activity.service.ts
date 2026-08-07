@@ -241,6 +241,61 @@ export const activityService = {
     });
   },
 
+  // Classroom module: classrooms are NOT teams, so the aula id travels in
+  // metadata and the team/project fields stay empty (same as USER_REGISTERED).
+
+  async logClassroomCreated(
+    classroomId: string | Types.ObjectId,
+    actorId: string | Types.ObjectId,
+    classroomName: string,
+  ): Promise<void> {
+    await safeLog({
+      actor: actorId,
+      type: 'CLASSROOM_CREATED',
+      message: `Aula "${classroomName}" creada`,
+      metadata: { classroomId: classroomId.toString() },
+    });
+  },
+
+  async logClassroomJoined(
+    classroomId: string | Types.ObjectId,
+    actorId: string | Types.ObjectId,
+    classroomName: string,
+  ): Promise<void> {
+    await safeLog({
+      actor: actorId,
+      type: 'CLASSROOM_JOINED',
+      message: `Nuevo alumno en el aula "${classroomName}"`,
+      metadata: { classroomId: classroomId.toString() },
+    });
+  },
+
+  async logAssignmentCreated(
+    classroomId: string | Types.ObjectId,
+    actorId: string | Types.ObjectId,
+    assignmentTitle: string,
+  ): Promise<void> {
+    await safeLog({
+      actor: actorId,
+      type: 'ASSIGNMENT_CREATED',
+      message: `Tarea de aula "${assignmentTitle}" creada`,
+      metadata: { classroomId: classroomId.toString() },
+    });
+  },
+
+  async logSubmissionReceived(
+    classroomId: string | Types.ObjectId,
+    actorId: string | Types.ObjectId,
+    assignmentTitle: string,
+  ): Promise<void> {
+    await safeLog({
+      actor: actorId,
+      type: 'SUBMISSION_RECEIVED',
+      message: `Entrega recibida para "${assignmentTitle}"`,
+      metadata: { classroomId: classroomId.toString() },
+    });
+  },
+
   async listByTeam(
     teamId: string,
     query: Record<string, unknown>,
