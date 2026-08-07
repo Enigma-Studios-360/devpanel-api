@@ -1,0 +1,50 @@
+# Blueprint de Render para la API de DevHub.
+# En Render: New + > Blueprint > conectar este repo. Lee este archivo y crea el servicio.
+# Las variables marcadas sync:false se capturan a mano en el dashboard (NUNCA van al repo).
+services:
+  - type: web
+    name: devhub-api
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_DATABASE
+        value: devhub
+      - key: JWT_EXPIRES_IN
+        value: 1d
+      - key: UPLOAD_DIR
+        value: uploads
+      - key: DEEPSEEK_BASE_URL
+        value: https://api.deepseek.com/v1
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+      - key: DEEPSEEK_MAX_TOKENS
+        value: "400"
+      - key: ASSISTANT_RATE_PER_MINUTE
+        value: "12"
+      # --- Secretos: capturar en el dashboard de Render (sync:false) ---
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false # ej: https://devhub.tudominio.mx,https://devhub-web.vercel.app
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_OAUTH_CLIENT_ID
+        sync: false
+      - key: GITHUB_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: API_BASE_URL
+        sync: false # ej: https://devhub-api.onrender.com
+      - key: WEB_BASE_URL
+        sync: false # ej: https://devhub-web.vercel.app
+      - key: VERCEL_TOKEN
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false

@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 
 import { env } from './config/env';
 import { corsOptions } from './config/cors';
@@ -42,6 +43,24 @@ export const createApp = (): Express => {
   if (env.nodeEnv !== 'test') {
     app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
   }
+
+  // Global rate limiting (per IP). /health queda fuera para los checks de Render.
+  const globalLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 300,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests, slow down.' } },
+  });
+  const authLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 20,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many auth attempts, try again in a minute.' } },
+  });
+  app.use('/api', globalLimiter);
+  app.use('/api/auth', authLimiter);
 
   // Health check
   app.get('/health', (_req: Request, res: Response) => {
